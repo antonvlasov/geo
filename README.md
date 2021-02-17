@@ -187,3 +187,33 @@ LGET list1 3
 LSET list1 20 2
 Index out of range
 ```
+# Клиент
+Все методы доступны в виде функций с подписью вида
+```func(conn net.Conn, args []string) error {}```
+и описаны в файле client.go
+Пример использования:
+```
+clientConn, err := net.DialTimeout("tcp", "localhost:7089", 0)
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = Set(clientConn, []string{"name", "Anton"})
+	if err != nil {
+		t.Error(err)
+	}
+	reader := bufio.NewReader(clientConn)
+	bytes, err := reader.ReadBytes('\n')
+	fmt.Println(string(bytes))
+```	
+# Тесты
+Релизовано покрытия тестами более 70% кода и нагрузочные тесты операция записи и чтения, нагрузочный тест операции чтения с использованием нескольких потоков.
+### Операция записи:
+BenchmarkSet             1000000               173 ns/op
+### Операция чтения:
+BenchmarkGet             1000000                56.4 ns/op
+### Конкурентное чтение с разным количеством потоков:
+BenchmarkGetConcurrent            10000000               289 ns/op
+BenchmarkGetConcurrent-2          10000000               287 ns/op
+BenchmarkGetConcurrent-4          10000000               226 ns/op
+BenchmarkGetConcurrent-8          10000000               238 ns/op 

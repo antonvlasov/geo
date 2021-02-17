@@ -2,6 +2,7 @@ package cache
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -15,6 +16,94 @@ var fields = []interface{}{
 	"Anton",
 	"Vlasov",
 	"20",
+}
+
+var result string
+
+func BenchmarkSet(b *testing.B) {
+	c := (NewCache()).(*cache)
+	go c.StartCleaner()
+	var r string
+	var err error
+	for i := 0; i < b.N; i += 1 {
+		b.StopTimer()
+		key := fmt.Sprintf("field%v", i)
+		value := fmt.Sprintf("value%v", i)
+		args := []string{key, value}
+		b.StartTimer()
+		r, err = c.Set(args)
+		b.StopTimer()
+		if err != nil {
+			b.Error(err)
+		}
+		_, err = c.Del([]string{key})
+		if err != nil {
+			b.Error(err)
+		}
+	}
+	result = r
+}
+func BenchmarkGet(b *testing.B) {
+	c := (NewCache()).(*cache)
+	go c.StartCleaner()
+	var r string
+	var err error
+	for i := 0; i < b.N; i += 1 {
+		key := fmt.Sprintf("field%v", i)
+		value := fmt.Sprintf("value%v", i)
+		args := []string{key, value}
+		r, err = c.Set(args)
+		if err != nil {
+			b.Error(err)
+		}
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i += 1 {
+		b.StopTimer()
+		key := fmt.Sprintf("field%v", i)
+		args := []string{key}
+		b.StartTimer()
+		r, err = c.Get(args)
+		b.StopTimer()
+		if err != nil {
+			b.Error(err)
+		}
+	}
+	result = r
+}
+func BenchmarkGetConcurrent(b *testing.B) {
+	c := (NewCache()).(*cache)
+	go c.StartCleaner()
+	var r string
+	var err error
+
+	for i := 0; i < b.N; i += 1 {
+		key := fmt.Sprintf("field%v", i)
+		value := fmt.Sprintf("value%v", i)
+		args := []string{key, value}
+		r, err = c.Set(args)
+		if err != nil {
+			b.Error(err)
+		}
+		if r != "OK" {
+			b.Error(r)
+		}
+	}
+	b.ResetTimer()
+	var wg sync.WaitGroup
+	wg.Add(b.N)
+	for i := 0; i < b.N; i += 1 {
+		b.StopTimer()
+		key := fmt.Sprintf("field%v", i)
+		args := []string{key}
+		b.StartTimer()
+		go func(wg *sync.WaitGroup) {
+			c.Get(args)
+			wg.Done()
+		}(&wg)
+	}
+	wg.Wait()
+	result = r
 }
 
 func TestKeys(t *testing.T) {

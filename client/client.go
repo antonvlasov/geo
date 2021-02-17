@@ -54,3 +54,7 @@ func LSet(conn net.Conn, args []string) error {
 	_, err := conn.Write([]byte(fmt.Sprintf("LSET %v\r\n", strings.Trim(fmt.Sprint(args), "[]"))))
 	return err
 }
+func Expire(conn net.Conn, args []string) error {
+	_, err := conn.Write([]byte(fmt.Sprintf("EXPIRE %v\r\n", strings.Trim(fmt.Sprint(args), "[]"))))
+	return err
+}

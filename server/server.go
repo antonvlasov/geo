@@ -3,12 +3,10 @@ package server
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
+	"log"
 	"net"
 	"strings"
-
-	"github.com/antonvlasov/geo/cache"
 )
 
 type TelnetServer interface {
@@ -29,33 +27,6 @@ func NewTelnetServer() TelnetServer {
 	}
 }
 
-func Run(port int) error {
-	server := NewTelnetServer()
-	cache := cache.NewCache()
-	go cache.StartCleaner()
-	handler := func(w io.Writer, req *RESTRequest) error {
-		response, err := cache.HandleRequest(req.Method, req.Args)
-		if err != nil {
-			return err
-		}
-		_, err = w.Write([]byte(response + "\r\n"))
-		if err != nil {
-			return err
-		}
-		return err
-	}
-	server.SetHandler("default", handler)
-
-	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%v", port))
-	if err != nil {
-		return err
-	}
-	err = server.ListenAndServe(addr)
-	if err != nil {
-		fmt.Println(err)
-	}
-	return err
-}
 func (this *telnetServer) SetHandler(method string, h func(w io.Writer, req *RESTRequest) error) {
 	this.handlers[method] = h
 }
@@ -94,33 +65,35 @@ func (this *telnetServer) ListenAndServe(addr *net.TCPAddr) error {
 			return err
 		}
 		defer conn.Close()
-		connReader := bufio.NewReader(conn)
-		for {
-			bytes, err := connReader.ReadBytes('\n')
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				return err
-			}
-			msg := strings.TrimSuffix(string(bytes), "\r\n")
+		go func(conn net.Conn) {
+			connReader := bufio.NewReader(conn)
+			for {
+				bytes, err := connReader.ReadBytes('\n')
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					log.Fatal(err)
+				}
+				msg := strings.TrimSuffix(string(bytes), "\r\n")
 
-			req, err := RESTParse(msg)
-			if err != nil {
-				_, err = conn.Write([]byte(err.Error() + "\r\n"))
+				req, err := RESTParse(msg)
 				if err != nil {
-					return err
+					_, err = conn.Write([]byte(err.Error() + "\r\n"))
+					if err != nil {
+						log.Fatal(err)
+					}
+					continue
 				}
-				continue
-			}
-			err = this.HandleRequest(conn, &req)
-			if err != nil {
-				_, err = conn.Write([]byte(err.Error() + "\r\n"))
+				err = this.HandleRequest(conn, &req)
 				if err != nil {
-					return err
+					_, err = conn.Write([]byte(err.Error() + "\r\n"))
+					if err != nil {
+						log.Fatal(err)
+					}
 				}
 			}
-		}
+		}(conn)
 	}
 }
 

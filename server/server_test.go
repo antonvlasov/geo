@@ -6,9 +6,11 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/antonvlasov/geo/cache"
 	"github.com/antonvlasov/geo/client"
 )
 
@@ -65,7 +67,33 @@ func echoHandler(w io.Writer, req *RESTRequest) error {
 	}
 	return nil
 }
+func Run(port int) error {
+	CacheServer := NewTelnetServer()
+	cache := cache.NewCache()
+	go cache.StartCleaner()
+	handler := func(w io.Writer, req *RESTRequest) error {
+		response, err := cache.HandleRequest(req.Method, req.Args)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write([]byte(response + "\r\n"))
+		if err != nil {
+			return err
+		}
+		return err
+	}
+	CacheServer.SetHandler("default", handler)
 
+	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%v", port))
+	if err != nil {
+		return err
+	}
+	err = CacheServer.ListenAndServe(addr)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return err
+}
 func TestCacheHandler(t *testing.T) {
 	port := 1205
 	go Run(port)
@@ -146,4 +174,56 @@ func TestCacheHandler(t *testing.T) {
 	if string(resp[:n]) != "val1\r\n" {
 		t.Errorf("expected %v, got %v", "val1", string(resp[:n]))
 	}
+}
+
+func TestMultConn(t *testing.T) {
+	port := 1205
+	go Run(port)
+
+	nconn := 10
+	connPool := make([]net.Conn, nconn)
+	readerPool := make([]*bufio.Reader, nconn)
+	var err error
+	for i := 0; i < nconn; i++ {
+		connPool[i], err = net.DialTimeout("tcp", fmt.Sprintf("localhost:%v", port), 0)
+		if err != nil {
+			t.Error(err)
+		}
+		readerPool[i] = bufio.NewReader(connPool[i])
+	}
+	var wg sync.WaitGroup
+	wg.Add(nconn)
+	for i := 0; i < nconn; i++ {
+		go func(wg *sync.WaitGroup, i int) {
+			resp := make([]byte, 4000)
+			for j := 0; j < 1; j++ {
+				key := fmt.Sprintf("key%v%v", i, j)
+				value := fmt.Sprintf("value%v%v", i, j)
+				err = client.Set(connPool[i], []string{key, value})
+				if err != nil {
+					t.Error(err)
+				}
+				n, err := readerPool[i].Read(resp)
+				if err != nil {
+					t.Error(err)
+				}
+				if string(resp[:n]) != "OK\r\n" {
+					t.Errorf("expected %v, got %v", "OK", string(resp[:n]))
+				}
+				err = client.Get(connPool[i], []string{key})
+				if err != nil {
+					t.Error(err)
+				}
+				n, err = readerPool[i].Read(resp)
+				if err != nil {
+					t.Error(err)
+				}
+				if string(resp[:n]) != value+"\r\n" {
+					t.Errorf("expected %v, got %v", value, string(resp[:n]))
+				}
+			}
+			wg.Done()
+		}(&wg, i)
+	}
+	wg.Wait()
 }

@@ -32,6 +32,59 @@ func TestClient(t *testing.T) {
 	if string(bytes) != "SET name Anton\r\n" {
 		t.Errorf("expected SET name Anton\r\n, got %v", string(bytes))
 	}
+
+	err = Get(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = Keys(clientConn, []string{"*"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = Del(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = Get(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = HGet(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = HSet(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = LPush(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = RPush(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = LPop(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = RPop(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = LGet(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = LSet(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = Expire(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 type mockServer struct {
