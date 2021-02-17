@@ -177,7 +177,7 @@ func TestCacheHandler(t *testing.T) {
 }
 
 func TestMultConn(t *testing.T) {
-	port := 1205
+	port := 1405
 	go Run(port)
 
 	nconn := 10

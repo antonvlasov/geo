@@ -85,6 +85,14 @@ func TestClient(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	err = Save(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
+	err = Load(clientConn, []string{"name"})
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 type mockServer struct {

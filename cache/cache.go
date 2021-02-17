@@ -13,6 +13,8 @@ import (
 	"github.com/gobwas/glob"
 )
 
+const savepath string = "./saves"
+
 type ArgsError struct {
 	msg string
 }
@@ -22,7 +24,7 @@ func (err ArgsError) Error() string {
 }
 
 type Hashmap struct {
-	value map[string]string
+	Hashmap map[string]string
 }
 
 func NewHashmap() Hashmap {
@@ -30,19 +32,19 @@ func NewHashmap() Hashmap {
 }
 
 func (h *Hashmap) Read(key string) (value string, ok bool) {
-	value, ok = h.value[key]
+	value, ok = h.Hashmap[key]
 	return
 }
 func (h *Hashmap) Write(key, value string) {
-	h.value[key] = value
+	h.Hashmap[key] = value
 }
 
-type MutexList struct {
-	value *list.List
+type RList struct {
+	Value *list.List
 }
 
-func NewMutexList() MutexList {
-	return MutexList{list.New()}
+func NewRList() RList {
+	return RList{list.New()}
 }
 
 type Cache interface {
@@ -68,15 +70,17 @@ type Cache interface {
 	LSet(args []string) (response string, err error)
 	LGet(args []string) (response string, err error)
 	Expire(args []string) (response string, err error)
+	Save(args []string) (response string, err error)
+	Load(args []string) (response string, err error)
 }
 
 func NewCache() Cache {
-	return &cache{fields: make(map[string]interface{}), m: &sync.RWMutex{}, exps: NewExpirations()}
+	return &cache{Fields: make(map[string]interface{}), m: &sync.RWMutex{}, Exps: NewExpirations()}
 }
 
 type Expirations struct {
-	expirations []expiration
-	indexes     map[string]int
+	Expirations []expiration
+	Indexes     map[string]int
 	m           *sync.Mutex
 }
 
@@ -84,54 +88,54 @@ func NewExpirations() Expirations {
 	return Expirations{make([]expiration, 0), make(map[string]int), &sync.Mutex{}}
 }
 func (exp Expirations) Len() int {
-	return len(exp.expirations)
+	return len(exp.Expirations)
 }
 func (exp Expirations) Less(i, j int) bool {
-	return exp.expirations[i].expires.Before(exp.expirations[j].expires)
+	return exp.Expirations[i].Expires.Before(exp.Expirations[j].Expires)
 }
 func (exp Expirations) Swap(i, j int) {
-	exp.expirations[i], exp.expirations[j] = exp.expirations[j], exp.expirations[i]
-	exp.indexes[exp.expirations[i].field] = i
-	exp.indexes[exp.expirations[j].field] = j
+	exp.Expirations[i], exp.Expirations[j] = exp.Expirations[j], exp.Expirations[i]
+	exp.Indexes[exp.Expirations[i].Field] = i
+	exp.Indexes[exp.Expirations[j].Field] = j
 }
 func (exp *Expirations) Pop() interface{} {
-	n := len(exp.expirations)
-	res := exp.expirations[n-1]
-	delete(exp.indexes, res.field)
-	exp.expirations = exp.expirations[:n-1]
+	n := len(exp.Expirations)
+	res := exp.Expirations[n-1]
+	delete(exp.Indexes, res.Field)
+	exp.Expirations = exp.Expirations[:n-1]
 	return res
 }
 func (exp *Expirations) Push(val interface{}) {
 	record := val.(expiration)
-	exp.expirations = append(exp.expirations, record)
-	exp.indexes[record.field] = len(exp.expirations) - 1
+	exp.Expirations = append(exp.Expirations, record)
+	exp.Indexes[record.Field] = len(exp.Expirations) - 1
 }
 
 type expiration struct {
-	field   string
-	expires time.Time
+	Field   string
+	Expires time.Time
 }
 type cache struct {
-	fields map[string]interface{}
+	Fields map[string]interface{}
 	m      *sync.RWMutex
-	exps   Expirations
+	Exps   Expirations
 }
 
 // Mutex must be rlocked before calling read
 func (c *cache) read(key string) interface{} {
-	return c.fields[key]
+	return c.Fields[key]
 }
 
 // Mutex must be locked before calling write
 func (c *cache) write(key string, val interface{}) {
-	c.fields[key] = val
+	c.Fields[key] = val
 }
 
 // Mutex must be locked before calling delete
 func (c *cache) delete(key string) bool {
-	_, ok := c.fields[key]
+	_, ok := c.Fields[key]
 	if ok {
-		delete(c.fields, key)
+		delete(c.Fields, key)
 	}
 	return ok
 }
@@ -140,11 +144,11 @@ func (c *cache) delete(key string) bool {
 func (c *cache) setExpiration(key string, expires time.Duration) {
 	if expires != 0 {
 		timeStamp := time.Now().Add(expires)
-		heap.Push(&c.exps, expiration{key, timeStamp})
+		heap.Push(&c.Exps, expiration{key, timeStamp})
 	} else {
-		index, ok := c.exps.indexes[key]
+		index, ok := c.Exps.Indexes[key]
 		if ok {
-			heap.Remove(&c.exps, index)
+			heap.Remove(&c.Exps, index)
 		}
 	}
 }
@@ -153,23 +157,23 @@ func (c *cache) setExpiration(key string, expires time.Duration) {
 func (c *cache) StartCleaner() {
 	for {
 		time.Sleep(50 * time.Millisecond)
-		c.exps.m.Lock()
-		if c.exps.Len() != 0 {
+		c.Exps.m.Lock()
+		if c.Exps.Len() != 0 {
 			// closest expiration
-			expiration := c.exps.expirations[0]
-			for ; expiration.expires.Before(time.Now()); expiration = c.exps.expirations[0] {
-				if expiration.expires.Before(time.Now()) {
-					heap.Pop(&c.exps)
+			expiration := c.Exps.Expirations[0]
+			for ; expiration.Expires.Before(time.Now()); expiration = c.Exps.Expirations[0] {
+				if expiration.Expires.Before(time.Now()) {
+					heap.Pop(&c.Exps)
 					c.m.Lock()
-					c.delete(expiration.field)
+					c.delete(expiration.Field)
 					c.m.Unlock()
-					if c.exps.Len() == 0 {
+					if c.Exps.Len() == 0 {
 						break
 					}
 				}
 			}
 		}
-		c.exps.m.Unlock()
+		c.Exps.m.Unlock()
 	}
 }
 func (c *cache) Keys(args []string) (response string, err error) {
@@ -181,7 +185,7 @@ func (c *cache) Keys(args []string) (response string, err error) {
 	var keys []string
 	i := 1
 	c.m.RLock()
-	for key := range c.fields {
+	for key := range c.Fields {
 		match := glob.Match(key)
 		if match {
 			keys = append(keys, fmt.Sprintf("%v) \"%v\"", i, key))
@@ -233,7 +237,7 @@ func (c *cache) Set(args []string) (response string, err error) {
 		return
 	}
 
-	c.exps.m.Lock()
+	c.Exps.m.Lock()
 	c.m.Lock()
 
 	c.write(args[0], args[1])
@@ -256,7 +260,7 @@ func (c *cache) Set(args []string) (response string, err error) {
 		}
 	}
 	c.m.Unlock()
-	c.exps.m.Unlock()
+	c.Exps.m.Unlock()
 
 	response = "OK"
 	return
@@ -279,9 +283,9 @@ func (c *cache) Expire(args []string) (response string, err error) {
 			return
 		}
 		exp = time.Duration(secs * int(time.Second) / int(time.Nanosecond))
-		c.exps.m.Lock()
+		c.Exps.m.Lock()
 		c.setExpiration(args[0], exp)
-		c.exps.m.Unlock()
+		c.Exps.m.Unlock()
 		response = "(integer) 1"
 	}
 	return
@@ -311,7 +315,7 @@ func (c *cache) HSet(args []string) (response string, err error) {
 	}
 	for i := 1; i < n; i += 2 {
 		value := stored.(Hashmap)
-		value.value[args[i]] = args[i+1]
+		value.Hashmap[args[i]] = args[i+1]
 		counter += 1
 	}
 
@@ -353,21 +357,21 @@ func (c *cache) LPush(args []string) (response string, err error) {
 	stored := c.read(args[0])
 	switch stored.(type) {
 	case nil:
-		list := NewMutexList()
+		list := NewRList()
 		c.write(args[0], list)
 		stored = c.read(args[0])
-	case MutexList:
+	case RList:
 		break
 	default:
 		err = errors.New(fmt.Sprintf("Requested field is of type %T", stored))
 		return
 	}
-	list := stored.(MutexList)
+	list := stored.(RList)
 	for i := 1; i < len(args); i += 1 {
-		list.value.PushFront(args[i])
+		list.Value.PushFront(args[i])
 	}
 
-	response = fmt.Sprintf("(integer) %v", list.value.Len())
+	response = fmt.Sprintf("(integer) %v", list.Value.Len())
 	return
 }
 func (c *cache) RPush(args []string) (response string, err error) {
@@ -380,21 +384,21 @@ func (c *cache) RPush(args []string) (response string, err error) {
 	stored := c.read(args[0])
 	switch stored.(type) {
 	case nil:
-		list := NewMutexList()
+		list := NewRList()
 		c.write(args[0], list)
 		stored = c.read(args[0])
-	case MutexList:
+	case RList:
 		break
 	default:
 		err = errors.New(fmt.Sprintf("Requested field is of type %T", stored))
 		return
 	}
-	list := stored.(MutexList)
+	list := stored.(RList)
 	for i := 1; i < len(args); i += 1 {
-		list.value.PushBack(args[i])
+		list.Value.PushBack(args[i])
 	}
 
-	response = fmt.Sprintf("(integer) %v", list.value.Len())
+	response = fmt.Sprintf("(integer) %v", list.Value.Len())
 	return
 }
 func (c *cache) LPop(args []string) (response string, err error) {
@@ -408,17 +412,17 @@ func (c *cache) LPop(args []string) (response string, err error) {
 	switch stored.(type) {
 	case nil:
 		response = "(nil)"
-	case MutexList:
-		list := stored.(MutexList)
+	case RList:
+		list := stored.(RList)
 		if len(args) > 1 {
 			response, err = list.poprange(args, "LPOP")
 			if err != nil {
 				return
 			}
 		} else {
-			response = list.value.Remove(list.value.Front()).(string)
+			response = list.Value.Remove(list.Value.Front()).(string)
 		}
-		if list.value.Len() == 0 {
+		if list.Value.Len() == 0 {
 			c.delete(args[0])
 		}
 	default:
@@ -438,17 +442,17 @@ func (c *cache) RPop(args []string) (response string, err error) {
 	switch stored.(type) {
 	case nil:
 		response = "(nil)"
-	case MutexList:
-		list := stored.(MutexList)
+	case RList:
+		list := stored.(RList)
 		if len(args) > 1 {
 			response, err = list.poprange(args, "RPOP")
 			if err != nil {
 				return
 			}
 		} else {
-			response = list.value.Remove(list.value.Front()).(string)
+			response = list.Value.Remove(list.Value.Front()).(string)
 		}
-		if list.value.Len() == 0 {
+		if list.Value.Len() == 0 {
 			c.delete(args[0])
 		}
 	default:
@@ -457,7 +461,7 @@ func (c *cache) RPop(args []string) (response string, err error) {
 	}
 	return
 }
-func (l *MutexList) poprange(args []string, method string) (response string, err error) {
+func (l *RList) poprange(args []string, method string) (response string, err error) {
 	var popped strings.Builder
 	var start int
 	var end int
@@ -470,11 +474,11 @@ func (l *MutexList) poprange(args []string, method string) (response string, err
 		if err != nil {
 			return
 		}
-		start, err = formatIndex(start, l.value.Len())
+		start, err = formatIndex(start, l.Value.Len())
 		if err != nil {
 			return
 		}
-		end, err = formatIndex(end, l.value.Len())
+		end, err = formatIndex(end, l.Value.Len())
 		if err != nil {
 			return
 		}
@@ -490,8 +494,8 @@ func (l *MutexList) poprange(args []string, method string) (response string, err
 				err = errors.New("count must be positive")
 				return
 			}
-			if end >= l.value.Len() {
-				end = l.value.Len() - 1
+			if end >= l.Value.Len() {
+				end = l.Value.Len() - 1
 			}
 		} else if method == "RPOP" {
 			var temp int
@@ -499,15 +503,15 @@ func (l *MutexList) poprange(args []string, method string) (response string, err
 			if err != nil {
 				return
 			}
-			start = l.value.Len() - temp
-			if start >= l.value.Len() {
+			start = l.Value.Len() - temp
+			if start >= l.Value.Len() {
 				err = errors.New("count must be positive")
 				return
 			}
 			if start < 0 {
 				start = 0
 			}
-			end = l.value.Len() - 1
+			end = l.Value.Len() - 1
 		} else {
 			err = errors.New("unknown method")
 			return
@@ -526,7 +530,7 @@ func (l *MutexList) poprange(args []string, method string) (response string, err
 		}
 		for i := 0; i <= end-start; i += 1 {
 			next := iter.Next()
-			element := l.value.Remove(iter).(string)
+			element := l.Value.Remove(iter).(string)
 			addElement(&popped, &element, i+1)
 			iter = next
 		}
@@ -538,7 +542,7 @@ func (l *MutexList) poprange(args []string, method string) (response string, err
 		}
 		for i := 0; i <= end-start; i += 1 {
 			next := iter.Prev()
-			element := l.value.Remove(iter).(string)
+			element := l.Value.Remove(iter).(string)
 			addElement(&popped, &element, i+1)
 			iter = next
 		}
@@ -564,19 +568,19 @@ func addElement(builder *strings.Builder, str *string, i int) error {
 	}
 	return nil
 }
-func (l *MutexList) get(index int) *list.Element {
-	if index < 0 || index > l.value.Len() {
+func (l *RList) get(index int) *list.Element {
+	if index < 0 || index > l.Value.Len() {
 		return nil
 	}
 	var iter *list.Element
-	if index < l.value.Len()-index {
-		iter = l.value.Front()
+	if index < l.Value.Len()-index {
+		iter = l.Value.Front()
 		for count := 0; count < index; count += 1 {
 			iter = iter.Next()
 		}
 	} else {
-		iter = l.value.Back()
-		for count := 0; count < l.value.Len()-index-1; count += 1 {
+		iter = l.Value.Back()
+		for count := 0; count < l.Value.Len()-index-1; count += 1 {
 			iter = iter.Prev()
 		}
 	}
@@ -603,8 +607,8 @@ func (c *cache) LSet(args []string) (response string, err error) {
 	defer c.m.Unlock()
 	stored := c.read(args[0])
 	switch stored.(type) {
-	case MutexList:
-		value := stored.(MutexList)
+	case RList:
+		value := stored.(RList)
 		var index int
 		index, err = strconv.Atoi(args[1])
 		if err != nil {
@@ -633,8 +637,8 @@ func (c *cache) LGet(args []string) (response string, err error) {
 	defer c.m.RUnlock()
 	stored := c.read(args[0])
 	switch stored.(type) {
-	case MutexList:
-		value := stored.(MutexList)
+	case RList:
+		value := stored.(RList)
 		var index int
 		index, err = strconv.Atoi(args[1])
 		if err != nil {
@@ -653,7 +657,34 @@ func (c *cache) LGet(args []string) (response string, err error) {
 	}
 	return
 }
-
+func (c *cache) Save(args []string) (response string, err error) {
+	if len(args) != 1 {
+		err = ArgsError{"Expected format: SAVE name"}
+		return
+	}
+	c.m.RLock()
+	defer c.m.RUnlock()
+	err = Save(c, savepath, args[0])
+	if err != nil {
+		return
+	}
+	response = "OK"
+	return
+}
+func (c *cache) Load(args []string) (response string, err error) {
+	if len(args) != 1 {
+		err = ArgsError{"Expected format: LOAD name"}
+		return
+	}
+	c.m.Lock()
+	defer c.m.Unlock()
+	err = Load(c, savepath, args[0])
+	if err != nil {
+		return
+	}
+	response = "OK"
+	return
+}
 func (c *cache) HandleRequest(method string, args []string) (response string, err error) {
 	switch method {
 	case "KEYS":
@@ -682,6 +713,10 @@ func (c *cache) HandleRequest(method string, args []string) (response string, er
 		return c.LSet(args)
 	case "EXPIRE":
 		return c.Expire(args)
+	case "SAVE":
+		return c.Save(args)
+	case "LOAD":
+		return c.Load(args)
 	default:
 		err = errors.New("method does not exist")
 		return

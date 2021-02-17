@@ -1,6 +1,7 @@
 FROM golang:1.15-alpine
 
 WORKDIR /geo
+RUN mkdir saves
 
 COPY go.mod .
 COPY go.sum .

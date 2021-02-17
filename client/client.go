@@ -58,3 +58,11 @@ func Expire(conn net.Conn, args []string) error {
 	_, err := conn.Write([]byte(fmt.Sprintf("EXPIRE %v\r\n", strings.Trim(fmt.Sprint(args), "[]"))))
 	return err
 }
+func Save(conn net.Conn, args []string) error {
+	_, err := conn.Write([]byte(fmt.Sprintf("SAVE %v\r\n", strings.Trim(fmt.Sprint(args), "[]"))))
+	return err
+}
+func Load(conn net.Conn, args []string) error {
+	_, err := conn.Write([]byte(fmt.Sprintf("LOAD %v\r\n", strings.Trim(fmt.Sprint(args), "[]"))))
+	return err
+}

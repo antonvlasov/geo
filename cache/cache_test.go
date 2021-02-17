@@ -2,6 +2,7 @@ package cache
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -138,9 +139,9 @@ func TestDel(t *testing.T) {
 	if response != "(integer) 2" {
 		t.Errorf("expected (integer) 2, got %v", response)
 	}
-	for key := range c.fields {
-		if key != keys[1] || c.fields[key] != fields[1] {
-			t.Errorf("expected: %v %v, got %v %v", keys[1], fields[1], key, c.fields[key])
+	for key := range c.Fields {
+		if key != keys[1] || c.Fields[key] != fields[1] {
+			t.Errorf("expected: %v %v, got %v %v", keys[1], fields[1], key, c.Fields[key])
 		}
 	}
 
@@ -261,7 +262,7 @@ func TestHSet(t *testing.T) {
 		t.Errorf("expected response (integer) 1 got %v", resp)
 	}
 	stored := c.read(k[0]).(Hashmap)
-	val := stored.value[h[0]]
+	val := stored.Hashmap[h[0]]
 	if val != v[0] {
 		t.Errorf("expected %v, got %v", v[0], val)
 	}
@@ -274,11 +275,11 @@ func TestHSet(t *testing.T) {
 		t.Errorf("expected response (integer) 2 got %v", resp)
 	}
 	stored = c.read(k[0]).(Hashmap)
-	val = stored.value[h[0]]
+	val = stored.Hashmap[h[0]]
 	if val != v[2] {
 		t.Errorf("expected %v, got %v", v[2], val)
 	}
-	val = stored.value[h[1]]
+	val = stored.Hashmap[h[1]]
 	if val != v[1] {
 		t.Errorf("expected %v, got %v", v[1], val)
 	}
@@ -595,5 +596,88 @@ func TestExpire(t *testing.T) {
 	}
 	if resp != "(nil)" {
 		t.Errorf("expected %v got %v", "(nil)", resp)
+	}
+}
+func TestSaveLoad(t *testing.T) {
+	c := (NewCache()).(*cache)
+	resp, err := c.Set([]string{"key", "value"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "OK" {
+		t.Errorf("expected OK, got %v", resp)
+	}
+	resp, err = c.HSet([]string{"hashmap", "hash1", "val1", "hash2", "val2"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "(integer) 2" {
+		t.Errorf("expected (integer) 1, got %v", resp)
+	}
+	resp, err = c.RPush([]string{"list", "1", "2", "3"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "(integer) 3" {
+		t.Errorf("expected (integer) 3, got %v", resp)
+	}
+	resp, err = c.Expire([]string{"key", "2000"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "(integer) 1" {
+		t.Errorf("expected (integer) 1, got %v", resp)
+	}
+
+	resp, err = c.Save([]string{"save1"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "OK" {
+		t.Errorf("expected OK, got %v", resp)
+	}
+
+	c = (NewCache()).(*cache)
+	resp, err = c.Load([]string{"save1"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "OK" {
+		t.Errorf("expected OK, got %v", resp)
+	}
+	go c.StartCleaner()
+
+	resp, err = c.Get([]string{"key"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "value" {
+		t.Errorf("expected %v, got %v", "value", resp)
+	}
+	resp, err = c.HGet([]string{"hashmap", "hash1"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "val1" {
+		t.Errorf("expected %v, got %v", "val1", resp)
+	}
+	resp, err = c.HGet([]string{"hashmap", "hash2"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "val2" {
+		t.Errorf("expected %v, got %v", "val2", resp)
+	}
+	resp, err = c.LPop([]string{"list", "0", "-1"})
+	if err != nil {
+		t.Error(err)
+	}
+	if resp != "1)1\n2)2\n3)3\n" {
+		t.Errorf("expected %v, got %v", "1)1\n2)2\n3)3\n", resp)
+	}
+
+	err = os.Remove("./saves/save1")
+	if err != nil {
+		t.Error(err)
 	}
 }
