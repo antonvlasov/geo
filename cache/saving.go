@@ -137,40 +137,6 @@ func (c *cache) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	return nil
-	// fieldsInt, ok := temp["Fields"]
-	// if !ok {
-	// 	return errors.New("wrong data")
-	// }
-	// fields, ok := fieldsInt.(map[string]interface{})
-	// if !ok {
-	// 	return errors.New("wrong data")
-	// }
-	// for key := range fields {
-	// 	switch fields[key].(type) {
-	// 	case string:
-	// 		field := fields[key].(string)
-	// 		c.Fields[key] = field
-	// 	case map[string]interface{}:
-	// 		field := fields[key].(map[string]interface{})
-
-	// 		if hmapInt, ok := field["Hashmap"]; ok {
-	// 			hmap = hmapInt.(map[string]string)
-	// 			c.Fields[key] = NewHashmap()
-	// 			for hash := range hmap {
-	// 				c.Fields[key][hash] = hmap[hash]
-	// 			}
-	// 		} else if field, ok := fields[key]["Value"]; ok {
-	// 			l := field.([]string)
-	// 			c.Fields[key] = NewRList()
-	// 			rlist := c.Fields[key].(RList)
-	// 			for i := range l {
-	// 				rlist.Value.PushBack(l[i])
-	// 			}
-	// 		} else {
-	// 			return errors.New("wrong data")
-	// 		}
-	// 	}
-	// }
 }
 func (l RList) MarshalJSON() ([]byte, error) {
 	arr := make([]string, l.Value.Len())
